@@ -32,11 +32,13 @@ const client =
 // =========================
 
 client.once(
+
   Events.ClientReady,
 
   readyClient => {
 
     console.log(
+
       `✅ ${readyClient.user.tag} 실행 완료`
     );
   }
@@ -48,6 +50,7 @@ client.once(
 // =========================
 
 client.on(
+
   Events.InteractionCreate,
 
   async interaction => {
@@ -78,20 +81,34 @@ client.on(
 
 
       // Button
-      if (interaction.isButton()) {
+      if (
+        interaction.isButton()
+      ) {
 
         const type =
+
           interaction.customId
             .split(':')[0];
 
+
         if (
-          ['stats', 'reviews', 'delete']
-            .includes(type)
+
+          [
+            'stats',
+            'ratings',
+            'delete'
+          ]
+            .includes(
+              type
+            )
+
         ) {
+
           return rating.handleButton(
             interaction
           );
         }
+
 
         return movie.handleButton(
           interaction
@@ -112,7 +129,9 @@ client.on(
 
     } catch (error) {
 
-      console.error(error);
+      console.error(
+        error
+      );
 
 
       // 이미 defer한 Interaction
@@ -121,19 +140,26 @@ client.on(
       ) {
 
         await interaction.editReply({
+
           content:
             '❌ 오류가 발생했습니다.',
-          components: []
+
+          components:
+            []
         });
+
 
         return;
       }
 
 
-      // 아직 응답 안 한 Interaction
+      // 아직 응답하지 않은 Interaction
       if (
+
         interaction.isRepliable()
+
         &&
+
         !interaction.replied
       ) {
 

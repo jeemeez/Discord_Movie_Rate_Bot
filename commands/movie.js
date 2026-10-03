@@ -2,21 +2,17 @@ const {
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
-  ActionRowBuilder,
-  MessageFlags
+  ActionRowBuilder
 } = require('discord.js');
-
 
 const {
   searchMovies,
   getMovie
 } = require('../services/tmdb');
 
-
 const {
   saveRating
 } = require('../database/db');
-
 
 const {
   movieEmbed,
@@ -26,76 +22,36 @@ const {
   finalRatingEmbed
 } = require('../utils/ui');
 
+const {
+  setSession,
+  getSession,
+  clearSession
+} = require('../utils/session');
 
-// 평가 진행 중인 정보
-const sessions = new Map();
-
-
-function sessionKey(interaction) {
-
-  return (
-    `${interaction.guildId}:` +
-    `${interaction.user.id}`
-  );
-}
-
-
-function getSession(
-  interaction,
-  movieId
-) {
-
-  const session =
-    sessions.get(
-      sessionKey(interaction)
-    );
-
-
-  if (
-    !session ||
-    String(session.movie.id)
-      !== String(movieId)
-  ) {
-
-    return null;
-  }
-
-  return session;
-}
-
-
-async function privateError(
-  interaction,
-  message
-) {
-
-  await interaction.reply({
-    content: message,
-    flags: MessageFlags.Ephemeral
-  });
-}
+const {
+  privateError,
+  checkOwner,
+  getDisplayName
+} = require('../utils/interaction');
 
 
 // =========================
 // /영화검색
 // =========================
 
-async function handleSearch(interaction) {
-
+async function handleSearch(
+  interaction
+) {
   await interaction.deferReply();
-
 
   const title =
     interaction.options
       .getString('제목');
 
-
   const movies =
     await searchMovies(title);
 
-
   if (!movies.length) {
-
     await interaction.editReply(
       '❌ 검색 결과가 없습니다.'
     );
@@ -103,9 +59,7 @@ async function handleSearch(interaction) {
     return;
   }
 
-
   await interaction.editReply({
-
     content:
       '🎬 평가할 영화를 선택해주세요.',
 
@@ -119,267 +73,264 @@ async function handleSearch(interaction) {
 
 
 // =========================
-// Button 처리
+// 영화 선택
 // =========================
 
-async function handleButton(interaction) {
+async function selectMovie(
+  interaction,
+  movieId
+) {
+  await interaction.deferUpdate();
 
-  const parts =
+  const movie =
+    await getMovie(movieId);
+
+  setSession(
+    interaction,
+    movie
+  );
+
+  await interaction.editReply({
+    content:
+      '⭐ 별점을 선택해주세요.',
+
+    embeds: [
+      movieEmbed(movie)
+    ],
+
+    components:
+      ratingButtons(
+        interaction.user.id,
+        movie.id
+      )
+  });
+}
+
+
+// =========================
+// 별점 선택
+// =========================
+
+async function selectRating(
+  interaction,
+  ownerId,
+  movieId,
+  rating
+) {
+  const session =
+    getSession(
+      interaction,
+      movieId
+    );
+
+  if (!session) {
+    return privateError(
+      interaction,
+      '❌ 평가 세션이 만료되었습니다.'
+    );
+  }
+
+  session.rating = rating;
+
+  const reviewInput =
+    new TextInputBuilder()
+      .setCustomId('review')
+      .setLabel('감상평')
+      .setPlaceholder(
+        '영화에 대한 감상평을 작성해주세요.'
+      )
+      .setStyle(
+        TextInputStyle.Paragraph
+      )
+      .setRequired(false)
+      .setMaxLength(1000);
+
+  const modal =
+    new ModalBuilder()
+      .setCustomId(
+        `review:${ownerId}:${movieId}`
+      )
+      .setTitle('🎬 감상평 작성')
+      .addComponents(
+        new ActionRowBuilder()
+          .addComponents(
+            reviewInput
+          )
+      );
+
+  await interaction.showModal(
+    modal
+  );
+}
+
+
+// =========================
+// 뱃지 선택 및 평가 저장
+// =========================
+
+async function selectBadge(
+  interaction,
+  movieId,
+  badge
+) {
+  const session =
+    getSession(
+      interaction,
+      movieId
+    );
+
+  if (!session) {
+    return privateError(
+      interaction,
+      '❌ 평가 세션이 만료되었습니다.'
+    );
+  }
+
+  const earth =
+    session.rating === 'earth';
+
+  saveRating({
+    guildId:
+      interaction.guildId,
+
+    userId:
+      interaction.user.id,
+
+    movie:
+      session.movie,
+
+    rating:
+      earth
+        ? null
+        : Number(session.rating),
+
+    specialRating:
+      earth
+        ? 'earth_apology'
+        : null,
+
+    review:
+      session.review || null,
+
+    badge:
+      badge === 'none'
+        ? null
+        : badge
+  });
+
+  const displayName =
+    await getDisplayName(
+      interaction,
+      interaction.user.id
+    );
+
+  await interaction.update({
+    content:
+      '✅ 평가 완료!',
+
+    embeds: [
+      finalRatingEmbed(
+        session.movie,
+        session.rating,
+        session.review,
+        badge,
+        displayName
+      )
+    ],
+
+    components: []
+  });
+
+  clearSession(
+    interaction,
+    movieId
+  );
+}
+
+
+// =========================
+// 평가 취소
+// =========================
+
+async function cancelRating(
+  interaction,
+  movieId
+) {
+  if (
+    !clearSession(
+      interaction,
+      movieId
+    )
+  ) {
+    return privateError(
+      interaction,
+      '❌ 평가 세션이 만료되었습니다.'
+    );
+  }
+
+  await interaction.update({
+    content:
+      '❌ 영화 평가를 취소했습니다.',
+
+    embeds: [],
+    components: []
+  });
+}
+
+
+// =========================
+// Button Router
+// =========================
+
+async function handleButton(
+  interaction
+) {
+  const [
+    type,
+    ownerId,
+    movieId,
+    value
+  ] =
     interaction.customId
       .split(':');
 
-
-  const type =
-    parts[0];
-
-  const ownerId =
-    parts[1];
-
-
-  // 다른 사람 버튼 사용 방지
   if (
-    interaction.user.id !== ownerId
-  ) {
-
-    await privateError(
+    !await checkOwner(
       interaction,
-      '❌ 다른 사용자의 버튼입니다.'
-    );
-
+      ownerId
+    )
+  ) {
     return;
   }
 
+  switch (type) {
 
-  // =====================
-  // 영화 선택
-  // =====================
-
-  if (type === 'movie') {
-
-    const movieId =
-      parts[2];
-
-
-    await interaction.deferUpdate();
-
-
-    const movie =
-      await getMovie(movieId);
-
-
-    sessions.set(
-      sessionKey(interaction),
-      {
-        movie,
-        rating: null,
-        review: null
-      }
-    );
-
-
-    await interaction.editReply({
-
-      content:
-        '⭐ 별점을 선택해주세요.',
-
-      embeds: [
-        movieEmbed(movie)
-      ],
-
-      components:
-        ratingButtons(
-          interaction.user.id,
-          movie.id
-        )
-    });
-
-    return;
-  }
-
-
-  // =====================
-  // 별점 선택
-  // =====================
-
-  if (type === 'rate') {
-
-    const movieId =
-      parts[2];
-
-    const rating =
-      parts[3];
-
-
-    const session =
-      getSession(
+    case 'movie':
+      return selectMovie(
         interaction,
         movieId
       );
 
-
-    if (!session) {
-
-      await privateError(
+    case 'rate':
+      return selectRating(
         interaction,
-        '❌ 평가 세션이 만료되었습니다.'
+        ownerId,
+        movieId,
+        value
       );
 
-      return;
-    }
+    case 'badge':
+      return selectBadge(
+        interaction,
+        movieId,
+        value
+      );
 
-
-    session.rating =
-      rating;
-
-
-    const modal =
-      new ModalBuilder()
-
-        .setCustomId(
-          `review:${ownerId}:${movieId}`
-        )
-
-        .setTitle(
-          '🎬 감상평 작성'
-        );
-
-
-    const reviewInput =
-      new TextInputBuilder()
-
-        .setCustomId('review')
-
-        .setLabel('감상평')
-
-        .setPlaceholder(
-          '영화에 대한 감상평을 작성해주세요.'
-        )
-
-        .setStyle(
-          TextInputStyle.Paragraph
-        )
-
-        .setRequired(false)
-
-        .setMaxLength(1000);
-
-
-    modal.addComponents(
-
-      new ActionRowBuilder()
-        .addComponents(
-          reviewInput
-        )
-    );
-
-
-    await interaction.showModal(
-      modal
-    );
-
-    return;
-  }
-
-
-  // =====================
-  // 뱃지 선택
-  // =====================
-
-  if (type === 'badge') {
-
-    const movieId =
-      parts[2];
-
-    const badge =
-      parts[3];
-
-
-    const session =
-      getSession(
+    case 'cancel':
+      return cancelRating(
         interaction,
         movieId
       );
-
-
-    if (!session) {
-
-      await privateError(
-        interaction,
-        '❌ 평가 세션이 만료되었습니다.'
-      );
-
-      return;
-    }
-
-
-    const earth =
-      session.rating === 'earth';
-
-
-    saveRating({
-
-      guildId:
-        interaction.guildId,
-
-      userId:
-        interaction.user.id,
-
-      movie:
-        session.movie,
-
-      rating:
-        earth
-          ? null
-          : Number(
-              session.rating
-            ),
-
-      specialRating:
-        earth
-          ? 'earth_apology'
-          : null,
-
-      review:
-        session.review || null,
-
-      badge:
-        badge === 'none'
-          ? null
-          : badge
-    });
-
-
-    const embed =
-      finalRatingEmbed(
-
-        session.movie,
-
-        session.rating,
-
-        session.review,
-
-        badge,
-
-        interaction.user.username
-      );
-
-
-    await interaction.update({
-
-      content:
-        '✅ 평가 완료!',
-
-      embeds: [embed],
-
-      components: []
-    });
-
-
-    sessions.delete(
-      sessionKey(interaction)
-    );
-
-    return;
   }
 }
 
@@ -388,15 +339,15 @@ async function handleButton(interaction) {
 // 감상평 Modal
 // =========================
 
-async function handleModal(interaction) {
-
+async function handleModal(
+  interaction
+) {
   if (
     !interaction.customId
       .startsWith('review:')
   ) {
     return;
   }
-
 
   const [
     ,
@@ -406,13 +357,14 @@ async function handleModal(interaction) {
     interaction.customId
       .split(':');
 
-
   if (
-    interaction.user.id !== ownerId
+    !await checkOwner(
+      interaction,
+      ownerId
+    )
   ) {
     return;
   }
-
 
   const session =
     getSession(
@@ -420,26 +372,19 @@ async function handleModal(interaction) {
       movieId
     );
 
-
   if (!session) {
-
-    await privateError(
+    return privateError(
       interaction,
       '❌ 평가 세션이 만료되었습니다.'
     );
-
-    return;
   }
-
 
   session.review =
     interaction.fields
       .getTextInputValue('review')
       .trim();
 
-
   await interaction.update({
-
     content:
       '뱃지를 선택해주세요. 필요 없으면 건너뛰기를 누르면 됩니다.',
 

@@ -17,26 +17,141 @@ const {
 
 const {
   movieButtons,
-  movieEmbed,
   userRatingsEmbed,
-  movieReviewsEmbed,
+  paginationButtons,
+  movieStatsEmbed,
   deleteButtons
 } = require('../utils/ui');
 
+const {
+  checkOwner,
+  getDisplayName
+} = require('../utils/interaction');
+
+
+const PAGE_SIZE = 5;
+
 
 // =========================
-// 영화 검색 공통 처리
+// 평가 페이지 생성
 // =========================
 
-async function showMovieChoices(
+function createRatingPage(
+  displayName,
+  ratings,
+  ownerId,
+  targetUserId,
+  page = 0
+) {
+  const totalPages =
+    Math.max(
+      1,
+      Math.ceil(
+        ratings.length /
+        PAGE_SIZE
+      )
+    );
+
+  const currentPage =
+    Math.min(
+      Math.max(page, 0),
+      totalPages - 1
+    );
+
+  const start =
+    currentPage *
+    PAGE_SIZE;
+
+  const items =
+    ratings.slice(
+      start,
+      start + PAGE_SIZE
+    );
+
+  return {
+    embeds: [
+      userRatingsEmbed(
+        displayName,
+        items,
+        currentPage,
+        totalPages
+      )
+    ],
+
+    components:
+      paginationButtons(
+        ownerId,
+        targetUserId,
+        currentPage,
+        totalPages
+      )
+  };
+}
+
+
+// =========================
+// 사용자 평가 조회
+// =========================
+
+async function showUserRatings(
   interaction,
-  prefix,
-  message
+  user,
+  ephemeral = false
+) {
+  const ratings =
+    getUserRatings(
+      interaction.guildId,
+      user.id
+    );
+
+  if (!ratings.length) {
+    await interaction.reply({
+      content:
+        `🎬 ${user.username}님은 아직 평가한 영화가 없습니다.`,
+
+      flags:
+        ephemeral
+          ? MessageFlags.Ephemeral
+          : undefined
+    });
+
+    return;
+  }
+
+  const displayName =
+    await getDisplayName(
+      interaction,
+      user.id
+    );
+
+  await interaction.reply({
+    ...createRatingPage(
+      displayName,
+      ratings,
+      interaction.user.id,
+      user.id
+    ),
+
+    flags:
+      ephemeral
+        ? MessageFlags.Ephemeral
+        : undefined
+  });
+}
+
+
+// =========================
+// 영화 검색
+// =========================
+
+async function showMovieSearch(
+  interaction
 ) {
   await interaction.deferReply();
 
   const title =
-    interaction.options.getString('제목');
+    interaction.options
+      .getString('제목');
 
   const movies =
     await searchMovies(title);
@@ -50,12 +165,14 @@ async function showMovieChoices(
   }
 
   await interaction.editReply({
-    content: message,
+    content:
+      '🎬 확인할 영화를 선택해주세요.',
+
     components:
       movieButtons(
         movies,
         interaction.user.id,
-        prefix
+        'stats'
       )
   });
 }
@@ -68,114 +185,31 @@ async function showMovieChoices(
 async function handleCommand(
   interaction
 ) {
-  switch (interaction.commandName) {
+  switch (
+    interaction.commandName
+  ) {
 
-    // =====================
-    // 내평가
-    // =====================
-
-    case '내평가': {
-      const ratings =
-        getUserRatings(
-          interaction.guildId,
-          interaction.user.id
-        );
-
-      if (!ratings.length) {
-        await interaction.reply({
-          content:
-            '아직 평가한 영화가 없습니다.',
-          flags:
-            MessageFlags.Ephemeral
-        });
-
-        return;
-      }
-
-      await interaction.reply({
-        embeds: [
-          userRatingsEmbed(
-            interaction.user,
-            ratings
-          )
-        ],
-        flags:
-          MessageFlags.Ephemeral
-      });
-
-      return;
-    }
+    case '내평가':
+      return showUserRatings(
+        interaction,
+        interaction.user,
+        true
+      );
 
 
-    // =====================
-    // 유저평가
-    // =====================
-
-    case '유저평가': {
-      const user =
+    case '유저평가':
+      return showUserRatings(
+        interaction,
         interaction.options
-          .getUser('사용자');
-
-      const ratings =
-        getUserRatings(
-          interaction.guildId,
-          user.id
-        );
-
-      if (!ratings.length) {
-        await interaction.reply(
-          `🎬 ${user.username}님은 아직 평가한 영화가 없습니다.`
-        );
-
-        return;
-      }
-
-      await interaction.reply({
-        embeds: [
-          userRatingsEmbed(
-            user,
-            ratings
-          )
-        ]
-      });
-
-      return;
-    }
-
-
-    // =====================
-    // 영화평점
-    // =====================
-
-    case '영화평점': {
-      await showMovieChoices(
-        interaction,
-        'stats',
-        '🎬 확인할 영화를 선택해주세요.'
+          .getUser('사용자')
       );
 
-      return;
-    }
 
-
-    // =====================
-    // 영화리뷰
-    // =====================
-
-    case '영화리뷰': {
-      await showMovieChoices(
-        interaction,
-        'reviews',
-        '🎬 리뷰를 확인할 영화를 선택해주세요.'
+    case '영화평점':
+      return showMovieSearch(
+        interaction
       );
 
-      return;
-    }
-
-
-    // =====================
-    // 평가삭제
-    // =====================
 
     case '평가삭제': {
       const title =
@@ -193,6 +227,7 @@ async function handleCommand(
         await interaction.reply({
           content:
             '❌ 해당 평가를 찾을 수 없습니다.',
+
           flags:
             MessageFlags.Ephemeral
         });
@@ -203,11 +238,13 @@ async function handleCommand(
       await interaction.reply({
         content:
           '🗑️ 삭제할 평가를 선택해주세요.',
+
         components:
           deleteButtons(
             ratings,
             interaction.user.id
           ),
+
         flags:
           MessageFlags.Ephemeral
       });
@@ -219,7 +256,110 @@ async function handleCommand(
 
 
 // =========================
-// 버튼 처리
+// 영화 평점 + 리뷰
+// =========================
+
+async function showMovieStats(
+  interaction,
+  movieId
+) {
+  await interaction.deferUpdate();
+
+  const movie =
+    await getMovie(movieId);
+
+  const stats =
+    getMovieStats(
+      interaction.guildId,
+      movie.id
+    );
+
+  const reviews =
+    getMovieReviews(
+      interaction.guildId,
+      movie.id
+    );
+
+  // User ID → 서버 닉네임
+  const namedReviews =
+    await Promise.all(
+      reviews.map(
+        async review => ({
+          ...review,
+
+          displayName:
+            await getDisplayName(
+              interaction,
+              review.user_id
+            )
+        })
+      )
+    );
+
+  await interaction.editReply({
+    content: '',
+
+    embeds: [
+      movieStatsEmbed(
+        movie,
+        stats,
+        namedReviews
+      )
+    ],
+
+    components: []
+  });
+}
+
+
+// =========================
+// 평가 페이지 이동
+// =========================
+
+async function changePage(
+  interaction,
+  ownerId,
+  targetUserId,
+  page
+) {
+  const ratings =
+    getUserRatings(
+      interaction.guildId,
+      targetUserId
+    );
+
+  if (!ratings.length) {
+    await interaction.update({
+      content:
+        '평가 내역이 없습니다.',
+
+      embeds: [],
+      components: []
+    });
+
+    return;
+  }
+
+  const displayName =
+    await getDisplayName(
+      interaction,
+      targetUserId
+    );
+
+  await interaction.update(
+    createRatingPage(
+      displayName,
+      ratings,
+      ownerId,
+      targetUserId,
+      Number(page)
+    )
+  );
+}
+
+
+// =========================
+// Button Router
 // =========================
 
 async function handleButton(
@@ -228,152 +368,56 @@ async function handleButton(
   const [
     type,
     ownerId,
-    movieId
+    value,
+    page
   ] =
     interaction.customId
       .split(':');
 
-
-  // 다른 사용자의 버튼 사용 방지
   if (
-    interaction.user.id !== ownerId
+    !await checkOwner(
+      interaction,
+      ownerId
+    )
   ) {
-    await interaction.reply({
-      content:
-        '❌ 다른 사용자의 버튼입니다.',
-      flags:
-        MessageFlags.Ephemeral
-    });
-
     return;
   }
 
 
-  // =====================
-  // 영화 평점 조회
-  // =====================
+  switch (type) {
 
-  if (type === 'stats') {
-    await interaction.deferUpdate();
+    case 'stats':
+      return showMovieStats(
+        interaction,
+        value
+      );
 
-    const movie =
-      await getMovie(movieId);
 
-    const stats =
-      getMovieStats(
+    case 'ratings':
+      return changePage(
+        interaction,
+        ownerId,
+        value,
+        page
+      );
+
+
+    case 'delete':
+
+      deleteRating(
         interaction.guildId,
-        movie.id
+        interaction.user.id,
+        value
       );
 
-    const total =
-      Number(
-        stats?.total_count || 0
-      );
-
-    if (total === 0) {
-      await interaction.editReply({
+      await interaction.update({
         content:
-          '아직 등록된 평가가 없습니다.',
-        embeds: [
-          movieEmbed(movie)
-        ],
+          '🗑️ 평가를 삭제했습니다.',
+
         components: []
       });
 
       return;
-    }
-
-    const ratingCount =
-      Number(
-        stats.rating_count || 0
-      );
-
-    const earthCount =
-      Number(
-        stats.earth_count || 0
-      );
-
-    const embed =
-      movieEmbed(movie);
-
-    if (ratingCount > 0) {
-      embed.addFields({
-        name: '서버 평균',
-        value:
-          `⭐ ${Number(stats.average_rating).toFixed(1)} / 5 (${ratingCount}명)`
-      });
-    }
-
-    if (earthCount > 0) {
-      embed.addFields({
-        name: '특별 평가',
-        value:
-          `🌍 지구에게 사죄 ${earthCount}명`
-      });
-    }
-
-    embed.addFields({
-      name: '총 평가',
-      value: `${total}명`
-    });
-
-    await interaction.editReply({
-      content: '',
-      embeds: [embed],
-      components: []
-    });
-
-    return;
-  }
-
-
-  // =====================
-  // 영화 리뷰 조회
-  // =====================
-
-  if (type === 'reviews') {
-    await interaction.deferUpdate();
-
-    const movie =
-      await getMovie(movieId);
-
-    const reviews =
-      getMovieReviews(
-        interaction.guildId,
-        movie.id
-      );
-
-    await interaction.editReply({
-      content: '',
-      embeds: [
-        movieReviewsEmbed(
-          movie,
-          reviews
-        )
-      ],
-      components: []
-    });
-
-    return;
-  }
-
-
-  // =====================
-  // 평가 삭제
-  // =====================
-
-  if (type === 'delete') {
-    deleteRating(
-      interaction.guildId,
-      interaction.user.id,
-      movieId
-    );
-
-    await interaction.update({
-      content:
-        '🗑️ 평가를 삭제했습니다.',
-      components: []
-    });
   }
 }
 

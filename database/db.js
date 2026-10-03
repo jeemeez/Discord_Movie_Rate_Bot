@@ -17,7 +17,10 @@ const db = new DatabaseSync(
 );
 
 
-// 테이블 생성
+// =========================
+// 평가 테이블
+// =========================
+
 db.exec(`
   CREATE TABLE IF NOT EXISTS ratings (
 
@@ -53,7 +56,10 @@ db.exec(`
 `);
 
 
+// =========================
 // 평가 저장 / 수정
+// =========================
+
 function saveRating(data) {
 
   const stmt = db.prepare(`
@@ -128,7 +134,10 @@ function saveRating(data) {
 }
 
 
-// 특정 유저 평가
+// =========================
+// 특정 유저 전체 평가
+// =========================
+
 function getUserRatings(
   guildId,
   userId
@@ -144,8 +153,6 @@ function getUserRatings(
       AND user_id = ?
 
     ORDER BY updated_at DESC
-
-    LIMIT 10
   `).all(
     guildId,
     userId
@@ -153,7 +160,10 @@ function getUserRatings(
 }
 
 
-// 영화 평균
+// =========================
+// 영화 평점 통계
+// =========================
+
 function getMovieStats(
   guildId,
   movieId
@@ -188,12 +198,18 @@ function getMovieStats(
 }
 
 
+// =========================
+// 영화별 최근 사용자 평가
+// =========================
+
 function getMovieReviews(
   guildId,
   movieId
 ) {
+
   return db.prepare(`
     SELECT
+
       user_id,
       rating,
       special_rating,
@@ -208,6 +224,8 @@ function getMovieReviews(
       AND movie_id = ?
 
     ORDER BY updated_at DESC
+
+    LIMIT 10
   `).all(
     guildId,
     movieId
@@ -215,14 +233,18 @@ function getMovieReviews(
 }
 
 
+// =========================
 // 삭제할 평가 검색
+// =========================
+
 function searchUserRatings(
   guildId,
   userId,
   title
 ) {
 
-  const keyword = `%${title}%`;
+  const keyword =
+    `%${title}%`;
 
   return db.prepare(`
     SELECT *
@@ -250,7 +272,10 @@ function searchUserRatings(
 }
 
 
+// =========================
 // 평가 삭제
+// =========================
+
 function deleteRating(
   guildId,
   userId,
@@ -273,10 +298,16 @@ function deleteRating(
 
 
 module.exports = {
+
   saveRating,
+
   getUserRatings,
+
   getMovieStats,
+
   getMovieReviews,
+
   searchUserRatings,
+
   deleteRating
 };

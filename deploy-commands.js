@@ -34,21 +34,11 @@ const commands = [
 
   new SlashCommandBuilder()
     .setName('영화평점')
-    .setDescription('영화의 서버 평균 평점을 확인합니다.')
+    .setDescription('영화의 서버 평점과 리뷰를 확인합니다.')
     .addStringOption(option =>
       option
         .setName('제목')
         .setDescription('확인할 영화 제목')
-        .setRequired(true)
-    ),
-
-  new SlashCommandBuilder()
-    .setName('영화리뷰')
-    .setDescription('해당 영화를 평가한 사용자들의 별점과 리뷰를 조회합니다.')
-    .addStringOption(option =>
-      option
-        .setName('제목')
-        .setDescription('조회할 영화 제목')
         .setRequired(true)
     ),
 
@@ -69,7 +59,6 @@ const rest = new REST({ version: '10' })
 
 (async () => {
   try {
-
     await rest.put(
       Routes.applicationGuildCommands(
         config.clientId,
