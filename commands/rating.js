@@ -2,27 +2,63 @@ const {
   MessageFlags
 } = require('discord.js');
 
-
 const {
   searchMovies,
   getMovie
 } = require('../services/tmdb');
 
-
 const {
   getUserRatings,
   getMovieStats,
+  getMovieReviews,
   searchUserRatings,
   deleteRating
 } = require('../database/db');
 
-
 const {
   movieButtons,
+  movieEmbed,
   userRatingsEmbed,
-  deleteButtons,
-  movieEmbed
+  movieReviewsEmbed,
+  deleteButtons
 } = require('../utils/ui');
+
+
+// =========================
+// 영화 검색 공통 처리
+// =========================
+
+async function showMovieChoices(
+  interaction,
+  prefix,
+  message
+) {
+  await interaction.deferReply();
+
+  const title =
+    interaction.options.getString('제목');
+
+  const movies =
+    await searchMovies(title);
+
+  if (!movies.length) {
+    await interaction.editReply(
+      '❌ 검색 결과가 없습니다.'
+    );
+
+    return;
+  }
+
+  await interaction.editReply({
+    content: message,
+    components:
+      movieButtons(
+        movies,
+        interaction.user.id,
+        prefix
+      )
+  });
+}
 
 
 // =========================
@@ -32,32 +68,23 @@ const {
 async function handleCommand(
   interaction
 ) {
-
-  switch (
-    interaction.commandName
-  ) {
-
+  switch (interaction.commandName) {
 
     // =====================
     // 내평가
     // =====================
 
     case '내평가': {
-
       const ratings =
         getUserRatings(
           interaction.guildId,
           interaction.user.id
         );
 
-
       if (!ratings.length) {
-
         await interaction.reply({
-
           content:
             '아직 평가한 영화가 없습니다.',
-
           flags:
             MessageFlags.Ephemeral
         });
@@ -65,16 +92,13 @@ async function handleCommand(
         return;
       }
 
-
       await interaction.reply({
-
         embeds: [
           userRatingsEmbed(
             interaction.user,
             ratings
           )
         ],
-
         flags:
           MessageFlags.Ephemeral
       });
@@ -88,11 +112,9 @@ async function handleCommand(
     // =====================
 
     case '유저평가': {
-
       const user =
         interaction.options
           .getUser('사용자');
-
 
       const ratings =
         getUserRatings(
@@ -100,9 +122,7 @@ async function handleCommand(
           user.id
         );
 
-
       if (!ratings.length) {
-
         await interaction.reply(
           `🎬 ${user.username}님은 아직 평가한 영화가 없습니다.`
         );
@@ -110,9 +130,7 @@ async function handleCommand(
         return;
       }
 
-
       await interaction.reply({
-
         embeds: [
           userRatingsEmbed(
             user,
@@ -130,41 +148,26 @@ async function handleCommand(
     // =====================
 
     case '영화평점': {
+      await showMovieChoices(
+        interaction,
+        'stats',
+        '🎬 확인할 영화를 선택해주세요.'
+      );
 
-      await interaction.deferReply();
-
-
-      const title =
-        interaction.options
-          .getString('제목');
-
-
-      const movies =
-        await searchMovies(title);
+      return;
+    }
 
 
-      if (!movies.length) {
+    // =====================
+    // 영화리뷰
+    // =====================
 
-        await interaction.editReply(
-          '❌ 검색 결과가 없습니다.'
-        );
-
-        return;
-      }
-
-
-      await interaction.editReply({
-
-        content:
-          '🎬 확인할 영화를 선택해주세요.',
-
-        components:
-          movieButtons(
-            movies,
-            interaction.user.id,
-            'stats'
-          )
-      });
+    case '영화리뷰': {
+      await showMovieChoices(
+        interaction,
+        'reviews',
+        '🎬 리뷰를 확인할 영화를 선택해주세요.'
+      );
 
       return;
     }
@@ -175,30 +178,21 @@ async function handleCommand(
     // =====================
 
     case '평가삭제': {
-
       const title =
         interaction.options
           .getString('제목');
 
-
       const ratings =
         searchUserRatings(
-
           interaction.guildId,
-
           interaction.user.id,
-
           title
         );
 
-
       if (!ratings.length) {
-
         await interaction.reply({
-
           content:
             '❌ 해당 평가를 찾을 수 없습니다.',
-
           flags:
             MessageFlags.Ephemeral
         });
@@ -206,18 +200,14 @@ async function handleCommand(
         return;
       }
 
-
       await interaction.reply({
-
         content:
           '🗑️ 삭제할 평가를 선택해주세요.',
-
         components:
           deleteButtons(
             ratings,
             interaction.user.id
           ),
-
         flags:
           MessageFlags.Ephemeral
       });
@@ -235,7 +225,6 @@ async function handleCommand(
 async function handleButton(
   interaction
 ) {
-
   const [
     type,
     ownerId,
@@ -245,15 +234,13 @@ async function handleButton(
       .split(':');
 
 
+  // 다른 사용자의 버튼 사용 방지
   if (
     interaction.user.id !== ownerId
   ) {
-
     await interaction.reply({
-
       content:
         '❌ 다른 사용자의 버튼입니다.',
-
       flags:
         MessageFlags.Ephemeral
     });
@@ -267,13 +254,10 @@ async function handleButton(
   // =====================
 
   if (type === 'stats') {
-
     await interaction.deferUpdate();
-
 
     const movie =
       await getMovie(movieId);
-
 
     const stats =
       getMovieStats(
@@ -281,89 +265,92 @@ async function handleButton(
         movie.id
       );
 
-
     const total =
       Number(
         stats?.total_count || 0
       );
 
-
     if (total === 0) {
-
       await interaction.editReply({
-
         content:
           '아직 등록된 평가가 없습니다.',
-
         embeds: [
           movieEmbed(movie)
         ],
-
         components: []
       });
 
       return;
     }
 
-
     const ratingCount =
       Number(
         stats.rating_count || 0
       );
-
 
     const earthCount =
       Number(
         stats.earth_count || 0
       );
 
-
     const embed =
       movieEmbed(movie);
 
-
     if (ratingCount > 0) {
-
       embed.addFields({
-
-        name:
-          '서버 평균',
-
+        name: '서버 평균',
         value:
           `⭐ ${Number(stats.average_rating).toFixed(1)} / 5 (${ratingCount}명)`
       });
     }
 
-
     if (earthCount > 0) {
-
       embed.addFields({
-
-        name:
-          '특별 평가',
-
+        name: '특별 평가',
         value:
           `🌍 지구에게 사죄 ${earthCount}명`
       });
     }
 
-
     embed.addFields({
-
-      name:
-        '총 평가',
-
-      value:
-        `${total}명`
+      name: '총 평가',
+      value: `${total}명`
     });
 
+    await interaction.editReply({
+      content: '',
+      embeds: [embed],
+      components: []
+    });
+
+    return;
+  }
+
+
+  // =====================
+  // 영화 리뷰 조회
+  // =====================
+
+  if (type === 'reviews') {
+    await interaction.deferUpdate();
+
+    const movie =
+      await getMovie(movieId);
+
+    const reviews =
+      getMovieReviews(
+        interaction.guildId,
+        movie.id
+      );
 
     await interaction.editReply({
-
       content: '',
-
-      embeds: [embed],
-
+      embeds: [
+        movieReviewsEmbed(
+          movie,
+          reviews
+        )
+      ],
       components: []
     });
 
@@ -376,26 +363,17 @@ async function handleButton(
   // =====================
 
   if (type === 'delete') {
-
     deleteRating(
-
       interaction.guildId,
-
       interaction.user.id,
-
       movieId
     );
 
-
     await interaction.update({
-
       content:
         '🗑️ 평가를 삭제했습니다.',
-
       components: []
     });
-
-    return;
   }
 }
 

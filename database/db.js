@@ -188,7 +188,10 @@ function getMovieStats(
 }
 
 
-function getMovieReviews(guildId, movieId) {
+function getMovieReviews(
+  guildId,
+  movieId
+) {
   return db.prepare(`
     SELECT
       user_id,
@@ -197,11 +200,18 @@ function getMovieReviews(guildId, movieId) {
       review,
       badge,
       updated_at
+
     FROM ratings
-    WHERE guild_id = ?
+
+    WHERE
+      guild_id = ?
       AND movie_id = ?
+
     ORDER BY updated_at DESC
-  `).all(guildId, movieId);
+  `).all(
+    guildId,
+    movieId
+  );
 }
 
 

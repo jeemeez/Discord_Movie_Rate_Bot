@@ -78,23 +78,20 @@ client.on(
 
 
       // Button
-      if (
-        interaction.isButton()
-      ) {
+      if (interaction.isButton()) {
+
+        const type =
+          interaction.customId
+            .split(':')[0];
 
         if (
-          interaction.customId
-            .startsWith('stats:')
-          ||
-          interaction.customId
-            .startsWith('delete:')
+          ['stats', 'reviews', 'delete']
+            .includes(type)
         ) {
-
           return rating.handleButton(
             interaction
           );
         }
-
 
         return movie.handleButton(
           interaction
