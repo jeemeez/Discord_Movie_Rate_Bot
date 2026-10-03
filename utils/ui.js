@@ -88,6 +88,97 @@ function movieButtons(
   return [row];
 }
 
+// ==============================
+// 영화 검색 결과 버튼 (리뷰조회용)
+// ==============================
+
+function movieReviewButtons(movies, userId) {
+  return new ActionRowBuilder().addComponents(
+    movies.slice(0, 5).map(movie => {
+      const year = movie.release_date
+        ? movie.release_date.slice(0, 4)
+        : '연도 미상';
+
+      const label = `${movie.title} (${year})`.slice(0, 80);
+
+      return new ButtonBuilder()
+        .setCustomId(`reviews:${userId}:${movie.id}`)
+        .setLabel(label)
+        .setStyle(ButtonStyle.Primary);
+    })
+  );
+}
+
+
+// =========================
+// 영화별 리뷰 출력 임베드
+// =========================
+
+function movieReviewsEmbed(movie, reviews) {
+  const embed = new EmbedBuilder()
+    .setTitle(`🎬 ${movie.koreanTitle}`)
+    .setDescription(
+      `**${movie.englishTitle}**\n` +
+      `${movie.releaseYear} · 감독 ${movie.director}\n\n` +
+      `총 **${reviews.length}명**이 평가했습니다.`
+    );
+
+  if (movie.poster) {
+    embed.setThumbnail(movie.poster);
+  }
+
+  if (reviews.length === 0) {
+    embed.addFields({
+      name: '평가',
+      value: '아직 이 영화를 평가한 사용자가 없습니다.'
+    });
+
+    return embed;
+  }
+
+  const visibleReviews = reviews.slice(0, 10);
+
+  for (const item of visibleReviews) {
+    let ratingText;
+
+    if (item.special_rating === 'earth_apology') {
+      ratingText = '🌍 지구에게 사죄';
+    } else {
+      ratingText = `⭐ ${item.rating} / 5`;
+    }
+
+    const badgeText = {
+      god: '🏆 갓영화',
+      maybe: '😐 애매하긴해',
+      shit: '💩 똥영화'
+    }[item.badge];
+
+    const lines = [ratingText];
+
+    if (badgeText) {
+      lines.push(badgeText);
+    }
+
+    lines.push(
+      `💬 ${item.review || '작성된 리뷰 없음'}`
+    );
+
+    embed.addFields({
+      name: `<@${item.user_id}>`,
+      value: lines.join('\n'),
+      inline: false
+    });
+  }
+
+  if (reviews.length > 10) {
+    embed.setFooter({
+      text: `외 ${reviews.length - 10}개의 평가가 더 있습니다.`
+    });
+  }
+
+  return embed;
+}
+
 
 // =========================
 // 별점 버튼
@@ -232,6 +323,20 @@ function badgeButtons(
             ButtonStyle.Danger
           ),
 
+        new ButtonBuilder()
+
+          .setCustomId(
+            `badge:${userId}:${movieId}:maybe`
+          )
+          .setLabel(
+            '애매하긴해'
+          )
+          .setEmoji(
+            '😐'
+          )
+          .setStyle(
+            ButtonStyle.Secondary
+          ),
 
         new ButtonBuilder()
 
@@ -254,7 +359,6 @@ function badgeButtons(
 // =========================
 // 최종 평가 카드
 // =========================
-
 function finalRatingEmbed(
   movie,
   rating,
@@ -282,20 +386,22 @@ function finalRatingEmbed(
   });
 
 
-  if (badge === 'god') {
+  const badgeText = {
+
+    god: '🏆 갓영화',
+
+    maybe: '😐 애매하긴해',
+
+    shit: '💩 똥영화'
+
+  }[badge];
+
+
+  if (badgeText) {
 
     embed.addFields({
       name: '뱃지',
-      value: '🏆 갓영화'
-    });
-
-  }
-
-  if (badge === 'shit') {
-
-    embed.addFields({
-      name: '뱃지',
-      value: '💩 똥영화'
+      value: badgeText
     });
 
   }
@@ -347,15 +453,15 @@ function userRatingsEmbed(
         : `⭐ ${item.rating} / 5`;
 
 
-    let badge = '';
+    const badge = {
 
-    if (item.badge === 'god') {
-      badge = ' 🏆';
-    }
+      god: ' 🏆',
 
-    if (item.badge === 'shit') {
-      badge = ' 💩';
-    }
+      maybe: ' 😐',
+
+      shit: ' 💩'
+
+    }[item.badge] || '';
 
 
     let review =
@@ -383,9 +489,6 @@ function userRatingsEmbed(
     });
 
   });
-
-  return embed;
-}
 
 
 // =========================
@@ -442,4 +545,8 @@ module.exports = {
   userRatingsEmbed,
 
   deleteButtons
+
+  movieReviewButtons,
+
+  movieReviewsEmbed
 };

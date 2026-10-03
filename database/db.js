@@ -188,6 +188,23 @@ function getMovieStats(
 }
 
 
+function getMovieReviews(guildId, movieId) {
+  return db.prepare(`
+    SELECT
+      user_id,
+      rating,
+      special_rating,
+      review,
+      badge,
+      updated_at
+    FROM ratings
+    WHERE guild_id = ?
+      AND movie_id = ?
+    ORDER BY updated_at DESC
+  `).all(guildId, movieId);
+}
+
+
 // 삭제할 평가 검색
 function searchUserRatings(
   guildId,
@@ -249,6 +266,7 @@ module.exports = {
   saveRating,
   getUserRatings,
   getMovieStats,
+  getMovieReviews,
   searchUserRatings,
   deleteRating
 };

@@ -43,6 +43,16 @@ const commands = [
     ),
 
   new SlashCommandBuilder()
+    .setName('영화리뷰')
+    .setDescription('해당 영화를 평가한 사용자들의 별점과 리뷰를 조회합니다.')
+    .addStringOption(option =>
+      option
+        .setName('제목')
+        .setDescription('조회할 영화 제목')
+        .setRequired(true)
+    ),
+
+  new SlashCommandBuilder()
     .setName('평가삭제')
     .setDescription('내가 남긴 영화 평가를 삭제합니다.')
     .addStringOption(option =>
